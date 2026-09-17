@@ -2,6 +2,12 @@
 
 Painel privado para acompanhar corrida e emagrecimento de várias pessoas em um único espaço compartilhado.
 
+## Site publicado
+
+<https://julielzissimo.github.io/mendonca-fit/>
+
+O workflow `.github/workflows/deploy-pages.yml` recompila e publica automaticamente o frontend no GitHub Pages a cada atualização da branch `main`.
+
 ## Funcionalidades
 
 - login único e sem cadastro público;
@@ -29,7 +35,7 @@ O projeto usa os recursos públicos de configuração definidos em `lib/appwrite
 - tabelas: `athletes`, `runs`, `run_splits` e `weight_entries`;
 - endpoint: `https://fra.cloud.appwrite.io/v1`.
 
-Os domínios `localhost` e `mendonca-fit.juliel-mendonca.chatgpt.site` estão registrados como aplicativos Web. As tabelas aceitam leitura e escrita apenas para o papel `users` (pessoas autenticadas).
+Os domínios `localhost`, `mendonca-fit.juliel-mendonca.chatgpt.site` e `julielzissimo.github.io` estão registrados como aplicativos Web. As tabelas aceitam leitura e escrita apenas para o papel `users` (pessoas autenticadas).
 
 ## Acesso compartilhado
 
