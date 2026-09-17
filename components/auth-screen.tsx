@@ -12,6 +12,15 @@ import type { Models } from "appwrite";
 
 export function AuthScreen({ onAuthenticated }: { onAuthenticated: (user: Models.User<Models.Preferences>) => void }) {
   const [loading, setLoading] = useState(false);
+  const [email, setEmail] = useState("");
+  const [recoverySent, setRecoverySent] = useState(false);
+  const [recovery] = useState(() => {
+    if (typeof window === "undefined") return null;
+    const params = new URLSearchParams(window.location.search);
+    const userId = params.get("userId");
+    const secret = params.get("secret");
+    return userId && secret ? { userId, secret } : null;
+  });
 
   async function authenticate(formData: FormData) {
     const email = String(formData.get("email") || "");
@@ -25,6 +34,37 @@ export function AuthScreen({ onAuthenticated }: { onAuthenticated: (user: Models
     } catch {
       toast.error("E-mail ou senha inválidos.");
     } finally {
+      setLoading(false);
+    }
+  }
+
+  async function requestRecovery() {
+    if (!email) return toast.error("Informe o e-mail de acesso.");
+    setLoading(true);
+    try {
+      await account.createRecovery({ email, url: `${window.location.origin}${window.location.pathname}` });
+      setRecoverySent(true);
+      toast.success("Enviamos o link para redefinir a senha.");
+    } catch {
+      toast.error("Não foi possível enviar o link de recuperação.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function updatePassword(formData: FormData) {
+    if (!recovery) return;
+    const password = String(formData.get("password") || "");
+    const confirmation = String(formData.get("confirmation") || "");
+    if (password !== confirmation) return toast.error("As senhas não coincidem.");
+    setLoading(true);
+    try {
+      await account.updateRecovery({ ...recovery, password });
+      window.history.replaceState({}, "", window.location.pathname);
+      toast.success("Senha atualizada. Entre com a nova senha.");
+      window.location.reload();
+    } catch {
+      toast.error("O link expirou ou já foi utilizado.");
       setLoading(false);
     }
   }
@@ -55,22 +95,33 @@ export function AuthScreen({ onAuthenticated }: { onAuthenticated: (user: Models
             <div className="grid size-10 place-items-center rounded-xl bg-[#c7ff3f] text-[#0b0f08]"><TrendingUp className="size-5" /></div>
             <p className="font-extrabold">MENDONÇA FIT</p>
           </div>
-          <p className="text-sm font-bold uppercase tracking-[.16em] text-[#c7ff3f]">Acesse seu painel</p>
-          <h2 className="mt-3 text-4xl font-black tracking-[-.05em]">Pronto para a próxima?</h2>
-          <p className="mt-3 text-white/45">Use o acesso compartilhado para visualizar e cadastrar todos os membros.</p>
-          <div className="mt-8"><AuthForm loading={loading} onSubmit={authenticate} /></div>
+          <p className="text-sm font-bold uppercase tracking-[.16em] text-[#c7ff3f]">{recovery ? "Defina seu acesso" : "Acesse seu painel"}</p>
+          <h2 className="mt-3 text-4xl font-black tracking-[-.05em]">{recovery ? "Crie uma nova senha." : "Pronto para a próxima?"}</h2>
+          <p className="mt-3 text-white/45">{recovery ? "Escolha uma senha forte para o login compartilhado." : "Use o acesso compartilhado para visualizar e cadastrar todos os membros."}</p>
+          <div className="mt-8">{recovery ? <ResetForm loading={loading} onSubmit={updatePassword} /> : <AuthForm email={email} loading={loading} recoverySent={recoverySent} onEmailChange={setEmail} onRecover={requestRecovery} onSubmit={authenticate} />}</div>
         </div>
       </section>
     </main>
   );
 }
 
-function AuthForm({ loading, onSubmit }: { loading: boolean; onSubmit: (data: FormData) => void }) {
+function AuthForm({ email, loading, recoverySent, onEmailChange, onRecover, onSubmit }: { email: string; loading: boolean; recoverySent: boolean; onEmailChange: (value: string) => void; onRecover: () => void; onSubmit: (data: FormData) => void }) {
   return (
     <form action={onSubmit} className="mt-6 space-y-5">
-      <div className="space-y-2"><Label htmlFor="signin-email">E-mail</Label><Input id="signin-email" name="email" type="email" required placeholder="acesso@exemplo.com" className="h-12 bg-white/[.035]" /></div>
+      <div className="space-y-2"><Label htmlFor="signin-email">E-mail</Label><Input id="signin-email" name="email" type="email" required value={email} onChange={(event) => onEmailChange(event.target.value)} placeholder="acesso@exemplo.com" className="h-12 bg-white/[.035]" /></div>
       <div className="space-y-2"><Label htmlFor="signin-password">Senha</Label><Input id="signin-password" name="password" type="password" minLength={6} required placeholder="Senha de acesso" className="h-12 bg-white/[.035]" /></div>
       <Button disabled={loading} className="h-12 w-full bg-[#c7ff3f] font-bold text-[#101508] hover:bg-[#d7ff75]">{loading ? "Só um instante..." : "Entrar no painel"}<ArrowRight className="size-4" /></Button>
+      <Button type="button" variant="ghost" disabled={loading || recoverySent} onClick={onRecover} className="w-full text-white/55 hover:bg-white/[.05] hover:text-white">{recoverySent ? "Link enviado para o e-mail" : "Esqueci ou quero trocar a senha"}</Button>
+    </form>
+  );
+}
+
+function ResetForm({ loading, onSubmit }: { loading: boolean; onSubmit: (data: FormData) => void }) {
+  return (
+    <form action={onSubmit} className="mt-6 space-y-5">
+      <div className="space-y-2"><Label htmlFor="new-password">Nova senha</Label><Input id="new-password" name="password" type="password" minLength={8} required placeholder="No mínimo 8 caracteres" className="h-12 bg-white/[.035]" /></div>
+      <div className="space-y-2"><Label htmlFor="password-confirmation">Confirme a nova senha</Label><Input id="password-confirmation" name="confirmation" type="password" minLength={8} required placeholder="Repita a nova senha" className="h-12 bg-white/[.035]" /></div>
+      <Button disabled={loading} className="h-12 w-full bg-[#c7ff3f] font-bold text-[#101508] hover:bg-[#d7ff75]">{loading ? "Atualizando..." : "Salvar nova senha"}<ArrowRight className="size-4" /></Button>
     </form>
   );
 }

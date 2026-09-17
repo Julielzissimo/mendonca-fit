@@ -1,6 +1,6 @@
 import { Account, Client, ID, Query, TablesDB } from "appwrite";
 
-const publicEnv = typeof process !== "undefined" ? process.env : {};
+const publicEnv: Record<string, string | undefined> = typeof process !== "undefined" ? process.env : {};
 
 export const appwriteConfig = {
   endpoint: publicEnv.NEXT_PUBLIC_APPWRITE_ENDPOINT || "https://fra.cloud.appwrite.io/v1",
