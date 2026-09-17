@@ -29,7 +29,7 @@ Todas as tabelas têm permissões `create`, `read`, `update` e `delete` para `us
 
 - `run_id`: varchar(36), obrigatório
 - `athlete_id`: varchar(36), obrigatório
-- `kilometer`: double, obrigatório
+- `kilometer`: double, obrigatório; representa a distância acumulada ao fim da parcial (por exemplo: `1`, `2`, ..., `6`, `6.6`)
 - `split_seconds`: integer, obrigatório
 - `heart_rate`: integer, obrigatório
 - `created_by`: varchar(36), obrigatório

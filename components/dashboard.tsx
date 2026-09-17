@@ -5,7 +5,6 @@ import {
   Activity,
   ArrowDownRight,
   CalendarDays,
-  ChevronRight,
   Gauge,
   HeartPulse,
   LogOut,
@@ -74,8 +73,9 @@ export function Dashboard({ userId, onSignOut }: { userId: string; onSignOut: ()
 
   const saveRun = useCallback(async (draft: RunDraft) => {
     const duration = draft.splits.reduce((sum, split) => sum + split.split_seconds, 0);
-    const averageHeartRate = Math.round(draft.splits.reduce((sum, split) => sum + split.heart_rate, 0) / draft.splits.length);
-    const baseRun = { run_date: toAppwriteDate(draft.run_date), distance_km: draft.splits.length, duration_seconds: duration, avg_heart_rate: averageHeartRate, perceived_effort: draft.perceived_effort, notes: draft.notes || null, created_by: userId, athlete_id: selectedAthleteId };
+    const distance = getRunDistance(draft.splits);
+    const averageHeartRate = Math.round(draft.splits.reduce((sum, split) => sum + split.heart_rate * split.split_seconds, 0) / duration);
+    const baseRun = { run_date: toAppwriteDate(draft.run_date), distance_km: distance, duration_seconds: duration, avg_heart_rate: averageHeartRate, perceived_effort: draft.perceived_effort, notes: draft.notes || null, created_by: userId, athlete_id: selectedAthleteId };
     const run = await tablesDB.createRow({ databaseId: appwriteConfig.databaseId, tableId: appwriteConfig.tables.runs, rowId: ID.unique(), data: baseRun });
     try {
       await Promise.all(draft.splits.map((split) => tablesDB.createRow({ databaseId: appwriteConfig.databaseId, tableId: appwriteConfig.tables.runSplits, rowId: ID.unique(), data: { ...split, run_id: run.$id, athlete_id: selectedAthleteId, created_by: userId } })));
@@ -236,6 +236,7 @@ function formatDecimal(value: number) { return value.toLocaleString("pt-BR", { m
 function shortDate(date: string) { return dateFormatter.format(new Date(`${date}T12:00:00`)).replace(". de ", " ").replace(".", ""); }
 function longDate(date: string) { return new Intl.DateTimeFormat("pt-BR").format(new Date(`${date}T12:00:00`)); }
 function numberOrNull(value: unknown) { return value == null ? null : Number(value); }
+function getRunDistance(splits: RunDraft["splits"]) { return splits.reduce((maximum, split) => Math.max(maximum, split.kilometer), 0); }
 
 type WebMCPContext = { registerTool: (tool: { name: string; title: string; description: string; inputSchema: object; annotations: { readOnlyHint: boolean; untrustedContentHint: boolean }; execute: (input: unknown) => Promise<unknown> }, options: { signal: AbortSignal }) => void | Promise<void> };
 function useWebMcp(saveRun: (draft: RunDraft) => Promise<void>, saveWeight: (draft: WeightDraft) => Promise<void>) {
@@ -267,7 +268,7 @@ function useWebMcp(saveRun: (draft: RunDraft) => Promise<void>, saveWeight: (dra
     const runTool = {
       name: "record_run",
       title: "Registrar corrida",
-      description: "Registra uma corrida com tempo e frequência cardíaca por quilômetro.",
+      description: "Registra uma corrida com tempo e frequência cardíaca por trecho. O campo kilometer indica a distância acumulada e pode terminar em uma parcial, como 6.6 km.",
       inputSchema: {
         type: "object",
         properties: {
@@ -280,8 +281,8 @@ function useWebMcp(saveRun: (draft: RunDraft) => Promise<void>, saveWeight: (dra
             items: {
               type: "object",
               properties: {
-                kilometer: { type: "number", minimum: 1 },
-                split_seconds: { type: "integer", minimum: 60, maximum: 3600 },
+                kilometer: { type: "number", exclusiveMinimum: 0 },
+                split_seconds: { type: "integer", minimum: 1, maximum: 3600 },
                 heart_rate: { type: "integer", minimum: 30, maximum: 240 },
               },
               required: ["kilometer", "split_seconds", "heart_rate"],
@@ -297,7 +298,7 @@ function useWebMcp(saveRun: (draft: RunDraft) => Promise<void>, saveWeight: (dra
         const value = input as RunDraft;
         if (!value.run_date || !Array.isArray(value.splits) || !value.splits.length) throw new Error("Dados de corrida inválidos.");
         await saveRun({ ...value, notes: value.notes || "" });
-        return { status: "saved", distance_km: value.splits.length };
+        return { status: "saved", distance_km: getRunDistance(value.splits) };
       },
     };
     void Promise.resolve(context.registerTool(weightTool, { signal: lifecycle.signal })).catch(() => undefined);
