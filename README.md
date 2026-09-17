@@ -10,7 +10,7 @@ Painel privado para acompanhar corrida e emagrecimento de várias pessoas em um 
 - métricas de ritmo, distância, tempo total e frequência cardíaca;
 - registro diário de peso, meta e evolução;
 - histórico e gráficos separados por pessoa;
-- banco, autenticação e regras de acesso no Supabase;
+- banco e autenticação no Appwrite;
 - layout responsivo para computador e celular.
 
 ## Stack
@@ -18,21 +18,28 @@ Painel privado para acompanhar corrida e emagrecimento de várias pessoas em um 
 - Next.js/Vinext, React e TypeScript;
 - Tailwind CSS e componentes Shadcn;
 - Recharts;
-- Supabase Auth + PostgreSQL + Row Level Security.
+- Appwrite Auth + TablesDB.
 
-## Configuração
+## Appwrite
 
-1. Crie um projeto no Supabase.
-2. Execute o SQL de `supabase/migrations/20260917103000_initial_schema.sql` no SQL Editor.
-3. Em Authentication, mantenha o cadastro público desativado e crie manualmente o usuário compartilhado.
-4. Copie `.env.example` para `.env.local` e preencha a URL e a chave pública (`anon`/`publishable`) do projeto.
-5. Instale e execute:
+O projeto usa os recursos públicos de configuração definidos em `lib/appwrite.ts`:
+
+- projeto: `6aabf0f3003c88993bba`;
+- banco TablesDB: `6aabf1350013c770ea82`;
+- tabelas: `athletes`, `runs`, `run_splits` e `weight_entries`;
+- endpoint: `https://fra.cloud.appwrite.io/v1`.
+
+Os domínios `localhost` e `mendonca-fit.juliel-mendonca.chatgpt.site` estão registrados como aplicativos Web. As tabelas aceitam leitura e escrita apenas para o papel `users` (pessoas autenticadas).
+
+## Acesso compartilhado
+
+O formulário público permite somente entrar. Crie manualmente um único usuário em **Appwrite Console → Auth → Users**, com o e-mail e a senha que serão compartilhados entre as pessoas autorizadas.
+
+## Desenvolvimento
 
 ```bash
 npm install
 npm run dev
 ```
 
-## Segurança
-
-As tabelas usam Row Level Security. Visitantes anônimos não têm acesso; usuários autenticados compartilham a visualização e o cadastro de todos os membros, conforme o objetivo deste projeto. A service role key nunca deve ser incluída no frontend.
+As variáveis de `.env.example` são opcionais e servem para apontar uma cópia do projeto para outros recursos do Appwrite. Nenhuma chave secreta é usada no navegador.

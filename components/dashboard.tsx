@@ -25,42 +25,49 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { demoAthletes, demoRuns, demoWeights } from "@/lib/demo-data";
-import { isSupabaseConfigured, supabase } from "@/lib/supabase";
+import { account, appwriteConfig, fromAppwriteDate, ID, Query, tablesDB, toAppwriteDate } from "@/lib/appwrite";
 import type { Athlete, AthleteDraft, Run, RunDraft, WeightDraft, WeightEntry } from "@/lib/types";
 
 const dateFormatter = new Intl.DateTimeFormat("pt-BR", { day: "2-digit", month: "short" });
 const monthFormatter = new Intl.DateTimeFormat("pt-BR", { month: "long", year: "numeric" });
 
-export function Dashboard({ userId }: { userId: string }) {
-  const demoMode = !isSupabaseConfigured;
-  const [runs, setRuns] = useState<Run[]>(demoMode ? demoRuns : []);
-  const [weights, setWeights] = useState<WeightEntry[]>(demoMode ? demoWeights : []);
-  const [athletes, setAthletes] = useState<Athlete[]>(demoMode ? demoAthletes : []);
-  const [selectedAthleteId, setSelectedAthleteId] = useState(demoMode ? demoAthletes[0].id : "");
-  const [loading, setLoading] = useState(!demoMode);
+export function Dashboard({ userId, onSignOut }: { userId: string; onSignOut: () => void }) {
+  const [runs, setRuns] = useState<Run[]>([]);
+  const [weights, setWeights] = useState<WeightEntry[]>([]);
+  const [athletes, setAthletes] = useState<Athlete[]>([]);
+  const [selectedAthleteId, setSelectedAthleteId] = useState("");
+  const [loading, setLoading] = useState(true);
   const [runOpen, setRunOpen] = useState(false);
   const [weightOpen, setWeightOpen] = useState(false);
   const [athleteOpen, setAthleteOpen] = useState(false);
 
   const loadData = useCallback(async () => {
-    if (!supabase) return;
     setLoading(true);
-    const [runsResult, weightsResult, athletesResult] = await Promise.all([
-      supabase.from("runs").select("*, run_splits(*)").order("run_date", { ascending: true }),
-      supabase.from("weight_entries").select("*").order("entry_date", { ascending: true }),
-      supabase.from("athletes").select("id, name, birth_date, start_weight_kg, target_weight_kg").order("name"),
-    ]);
-    if (runsResult.error || weightsResult.error || athletesResult.error) {
-      toast.error("Não foi possível carregar seus dados.");
-    } else {
-      setRuns((runsResult.data || []).map(normalizeRun));
-      setWeights((weightsResult.data || []).map((entry) => ({ ...entry, weight_kg: Number(entry.weight_kg) })) as WeightEntry[]);
-      const loadedAthletes = (athletesResult.data || []).map((athlete) => ({ ...athlete, start_weight_kg: numberOrNull(athlete.start_weight_kg), target_weight_kg: numberOrNull(athlete.target_weight_kg) })) as Athlete[];
+    try {
+      const [runsResult, splitsResult, weightsResult, athletesResult] = await Promise.all([
+        tablesDB.listRows({ databaseId: appwriteConfig.databaseId, tableId: appwriteConfig.tables.runs, queries: [Query.limit(5000)] }),
+        tablesDB.listRows({ databaseId: appwriteConfig.databaseId, tableId: appwriteConfig.tables.runSplits, queries: [Query.limit(5000)] }),
+        tablesDB.listRows({ databaseId: appwriteConfig.databaseId, tableId: appwriteConfig.tables.weightEntries, queries: [Query.limit(5000)] }),
+        tablesDB.listRows({ databaseId: appwriteConfig.databaseId, tableId: appwriteConfig.tables.athletes, queries: [Query.limit(5000)] }),
+      ]);
+      const splitsByRun = new Map<string, Run["run_splits"]>();
+      for (const row of splitsResult.rows) {
+        const split = normalizeSplit(row as unknown as Record<string, unknown>);
+        const current = splitsByRun.get(String(row.run_id)) || [];
+        current.push(split);
+        splitsByRun.set(String(row.run_id), current);
+      }
+      for (const splits of splitsByRun.values()) splits.sort((a, b) => a.kilometer - b.kilometer);
+      setRuns(runsResult.rows.map((row) => normalizeRun(row as unknown as Record<string, unknown>, splitsByRun.get(row.$id) || [])).sort((a, b) => a.run_date.localeCompare(b.run_date)));
+      setWeights(weightsResult.rows.map((row) => normalizeWeight(row as unknown as Record<string, unknown>)).sort((a, b) => a.entry_date.localeCompare(b.entry_date)));
+      const loadedAthletes = athletesResult.rows.map((row) => normalizeAthlete(row as unknown as Record<string, unknown>)).sort((a, b) => a.name.localeCompare(b.name));
       setAthletes(loadedAthletes);
       setSelectedAthleteId((current) => current && loadedAthletes.some((athlete) => athlete.id === current) ? current : loadedAthletes[0]?.id || "");
+    } catch {
+      toast.error("Não foi possível carregar seus dados.");
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   }, []);
 
   useEffect(() => { void loadData(); }, [loadData]);
@@ -68,45 +75,34 @@ export function Dashboard({ userId }: { userId: string }) {
   const saveRun = useCallback(async (draft: RunDraft) => {
     const duration = draft.splits.reduce((sum, split) => sum + split.split_seconds, 0);
     const averageHeartRate = Math.round(draft.splits.reduce((sum, split) => sum + split.heart_rate, 0) / draft.splits.length);
-    const baseRun = { run_date: draft.run_date, distance_km: draft.splits.length, duration_seconds: duration, avg_heart_rate: averageHeartRate, perceived_effort: draft.perceived_effort, notes: draft.notes || null };
-    if (!supabase) {
-      const next: Run = { id: crypto.randomUUID(), athlete_id: selectedAthleteId, ...baseRun, run_splits: draft.splits };
-      setRuns((current) => [...current, next].sort((a, b) => a.run_date.localeCompare(b.run_date)));
-      toast.success("Corrida adicionada ao modo demonstração.");
-      return;
+    const baseRun = { run_date: toAppwriteDate(draft.run_date), distance_km: draft.splits.length, duration_seconds: duration, avg_heart_rate: averageHeartRate, perceived_effort: draft.perceived_effort, notes: draft.notes || null, created_by: userId, athlete_id: selectedAthleteId };
+    const run = await tablesDB.createRow({ databaseId: appwriteConfig.databaseId, tableId: appwriteConfig.tables.runs, rowId: ID.unique(), data: baseRun });
+    try {
+      await Promise.all(draft.splits.map((split) => tablesDB.createRow({ databaseId: appwriteConfig.databaseId, tableId: appwriteConfig.tables.runSplits, rowId: ID.unique(), data: { ...split, run_id: run.$id, athlete_id: selectedAthleteId, created_by: userId } })));
+      setRuns((current) => [...current, normalizeRun(run as unknown as Record<string, unknown>, draft.splits)].sort((a, b) => a.run_date.localeCompare(b.run_date)));
+      toast.success("Corrida registrada.");
+    } catch (error) {
+      await tablesDB.deleteRow({ databaseId: appwriteConfig.databaseId, tableId: appwriteConfig.tables.runs, rowId: run.$id });
+      toast.error("Não foi possível salvar as parciais.");
+      throw error;
     }
-    const { data: run, error } = await supabase.from("runs").insert({ ...baseRun, user_id: userId, athlete_id: selectedAthleteId }).select().single();
-    if (error) { toast.error("Não foi possível salvar a corrida."); throw error; }
-    const { error: splitError } = await supabase.from("run_splits").insert(draft.splits.map((split) => ({ ...split, run_id: run.id, user_id: userId, athlete_id: selectedAthleteId })));
-    if (splitError) { await supabase.from("runs").delete().eq("id", run.id); toast.error("Não foi possível salvar as parciais."); throw splitError; }
-    setRuns((current) => [...current, { ...normalizeRun(run), run_splits: draft.splits }].sort((a, b) => a.run_date.localeCompare(b.run_date)));
-    toast.success("Corrida registrada.");
   }, [selectedAthleteId, userId]);
 
   const saveWeight = useCallback(async (draft: WeightDraft) => {
-    if (!supabase) {
-      setWeights((current) => [...current.filter((entry) => entry.entry_date !== draft.entry_date || entry.athlete_id !== selectedAthleteId), { id: crypto.randomUUID(), athlete_id: selectedAthleteId, ...draft }].sort((a, b) => a.entry_date.localeCompare(b.entry_date)));
-      toast.success("Peso atualizado no modo demonstração.");
-      return;
-    }
-    const { data, error } = await supabase.from("weight_entries").upsert({ user_id: userId, athlete_id: selectedAthleteId, ...draft }, { onConflict: "athlete_id,entry_date" }).select().single();
-    if (error) { toast.error("Não foi possível salvar o peso."); throw error; }
-    const normalized = { ...data, weight_kg: Number(data.weight_kg) } as WeightEntry;
+    const entryDate = toAppwriteDate(draft.entry_date);
+    const existing = await tablesDB.listRows({ databaseId: appwriteConfig.databaseId, tableId: appwriteConfig.tables.weightEntries, queries: [Query.equal("athlete_id", selectedAthleteId), Query.equal("entry_date", entryDate), Query.limit(1)] });
+    const data = { athlete_id: selectedAthleteId, entry_date: entryDate, weight_kg: draft.weight_kg, created_by: userId };
+    const row = existing.rows[0]
+      ? await tablesDB.updateRow({ databaseId: appwriteConfig.databaseId, tableId: appwriteConfig.tables.weightEntries, rowId: existing.rows[0].$id, data })
+      : await tablesDB.createRow({ databaseId: appwriteConfig.databaseId, tableId: appwriteConfig.tables.weightEntries, rowId: ID.unique(), data });
+    const normalized = normalizeWeight(row as unknown as Record<string, unknown>);
     setWeights((current) => [...current.filter((entry) => entry.entry_date !== draft.entry_date || entry.athlete_id !== selectedAthleteId), normalized].sort((a, b) => a.entry_date.localeCompare(b.entry_date)));
     toast.success("Peso registrado.");
   }, [selectedAthleteId, userId]);
 
   const saveAthlete = useCallback(async (draft: AthleteDraft) => {
-    if (!supabase) {
-      const athlete = { id: crypto.randomUUID(), ...draft };
-      setAthletes((current) => [...current, athlete]);
-      setSelectedAthleteId(athlete.id);
-      toast.success("Pessoa cadastrada no modo demonstração.");
-      return;
-    }
-    const { data, error } = await supabase.from("athletes").insert({ ...draft, created_by: userId }).select().single();
-    if (error) { toast.error("Não foi possível cadastrar a pessoa."); throw error; }
-    const athlete = { ...data, start_weight_kg: numberOrNull(data.start_weight_kg), target_weight_kg: numberOrNull(data.target_weight_kg) } as Athlete;
+    const row = await tablesDB.createRow({ databaseId: appwriteConfig.databaseId, tableId: appwriteConfig.tables.athletes, rowId: ID.unique(), data: { ...draft, birth_date: draft.birth_date ? toAppwriteDate(draft.birth_date) : null, created_by: userId } });
+    const athlete = normalizeAthlete(row as unknown as Record<string, unknown>);
     setAthletes((current) => [...current, athlete].sort((a, b) => a.name.localeCompare(b.name)));
     setSelectedAthleteId(athlete.id);
     toast.success(`${athlete.name} foi cadastrado(a).`);
@@ -138,7 +134,6 @@ export function Dashboard({ userId }: { userId: string }) {
             <div><p className="text-[1.05rem] font-extrabold tracking-[-0.03em]">MENDONÇA FIT</p><p className="text-xs text-white/45">corrida & evolução</p></div>
           </div>
           <div className="flex items-center gap-2">
-            {demoMode && <span className="hidden rounded-full border border-[#c7ff3f]/20 bg-[#c7ff3f]/10 px-3 py-1.5 text-xs font-semibold text-[#c7ff3f] md:inline">Demonstração</span>}
             <Select value={selectedAthleteId} onValueChange={(value) => value && setSelectedAthleteId(value)}>
               <SelectTrigger className="hidden h-10 w-44 border-white/10 bg-white/[.035] text-white sm:flex"><SelectValue placeholder="Selecionar pessoa" /></SelectTrigger>
               <SelectContent>{athletes.map((athlete) => <SelectItem key={athlete.id} value={athlete.id}>{athlete.name}</SelectItem>)}</SelectContent>
@@ -146,7 +141,7 @@ export function Dashboard({ userId }: { userId: string }) {
             <Button variant="outline" size="icon" onClick={() => setAthleteOpen(true)} className="h-10 border-white/10 bg-white/[.03] text-white hover:bg-white/10 hover:text-white" aria-label="Cadastrar pessoa"><UserPlus /></Button>
             <Button variant="outline" disabled={!activeAthlete} onClick={() => setWeightOpen(true)} className="hidden h-10 border-white/10 bg-white/[.03] text-white hover:bg-white/10 hover:text-white lg:inline-flex"><Scale /> Registrar peso</Button>
             <Button disabled={!activeAthlete} onClick={() => setRunOpen(true)} className="h-10 bg-[#c7ff3f] font-bold text-[#101508] hover:bg-[#d5ff70]"><Plus /> <span className="hidden sm:inline">Nova corrida</span></Button>
-            {!demoMode && <Button variant="ghost" size="icon" onClick={() => supabase?.auth.signOut()} className="text-white/50 hover:bg-white/10 hover:text-white" aria-label="Sair"><LogOut /></Button>}
+            <Button variant="ghost" size="icon" onClick={async () => { await account.deleteSession({ sessionId: "current" }); onSignOut(); }} className="text-white/50 hover:bg-white/10 hover:text-white" aria-label="Sair"><LogOut /></Button>
           </div>
         </header>
 
@@ -229,7 +224,10 @@ function EmptyState({ action }: { action: () => void }) { return <div className=
 function LoadingDashboard() { return <main className="min-h-screen bg-[#080a0d] p-6 text-white"><div className="mx-auto max-w-[1340px] space-y-6"><Skeleton className="h-14 bg-white/[.06]" /><Skeleton className="h-24 bg-white/[.06]" /><div className="grid gap-3 md:grid-cols-4">{[1,2,3,4].map((item) => <Skeleton key={item} className="h-36 bg-white/[.06]" />)}</div><Skeleton className="h-80 bg-white/[.06]" /></div></main>; }
 function PaceTooltip({ active, payload, label }: { active?: boolean; payload?: Array<{ value: number }>; label?: string }) { if (!active || !payload?.length) return null; return <div className="rounded-xl border border-white/10 bg-[#171b20] px-3 py-2 text-xs shadow-xl"><p className="text-white/40">{label}</p><p className="mt-1 font-mono font-bold text-[#c7ff3f]">{formatPace(payload[0].value)} /km</p></div>; }
 
-function normalizeRun(run: Record<string, unknown>): Run { return { id: String(run.id), athlete_id: String(run.athlete_id), run_date: String(run.run_date), distance_km: Number(run.distance_km), duration_seconds: Number(run.duration_seconds), avg_heart_rate: Number(run.avg_heart_rate), perceived_effort: run.perceived_effort == null ? null : Number(run.perceived_effort), notes: run.notes == null ? null : String(run.notes), run_splits: Array.isArray(run.run_splits) ? run.run_splits.map((split) => ({ ...(split as object), kilometer: Number((split as Record<string, unknown>).kilometer), split_seconds: Number((split as Record<string, unknown>).split_seconds), heart_rate: Number((split as Record<string, unknown>).heart_rate) })) as Run["run_splits"] : [] }; }
+function normalizeRun(run: Record<string, unknown>, splits: Run["run_splits"] = []): Run { return { id: String(run.$id), athlete_id: String(run.athlete_id), run_date: fromAppwriteDate(run.run_date), distance_km: Number(run.distance_km), duration_seconds: Number(run.duration_seconds), avg_heart_rate: Number(run.avg_heart_rate), perceived_effort: run.perceived_effort == null ? null : Number(run.perceived_effort), notes: run.notes == null ? null : String(run.notes), run_splits: splits }; }
+function normalizeSplit(split: Record<string, unknown>): Run["run_splits"][number] { return { id: String(split.$id), run_id: String(split.run_id), kilometer: Number(split.kilometer), split_seconds: Number(split.split_seconds), heart_rate: Number(split.heart_rate) }; }
+function normalizeWeight(entry: Record<string, unknown>): WeightEntry { return { id: String(entry.$id), athlete_id: String(entry.athlete_id), entry_date: fromAppwriteDate(entry.entry_date), weight_kg: Number(entry.weight_kg) }; }
+function normalizeAthlete(entry: Record<string, unknown>): Athlete { return { id: String(entry.$id), name: String(entry.name), birth_date: entry.birth_date ? fromAppwriteDate(entry.birth_date) : null, start_weight_kg: numberOrNull(entry.start_weight_kg), target_weight_kg: numberOrNull(entry.target_weight_kg) }; }
 function calculateMetrics(runs: Run[]) { const totalDistance = runs.reduce((sum, run) => sum + run.distance_km, 0); const totalDuration = runs.reduce((sum, run) => sum + run.duration_seconds, 0); const averagePace = totalDistance ? Math.round(totalDuration / totalDistance) : 0; const averageHeartRate = runs.length ? Math.round(runs.reduce((sum, run) => sum + run.avg_heart_rate, 0) / runs.length) : 0; const paces = runs.map((run) => Math.round(run.duration_seconds / run.distance_km)); return { totalDistance, totalDuration, averagePace, averageHeartRate, runCount: runs.length, bestPace: paces.length ? Math.min(...paces) : 0, paceGain: paces.length > 1 ? Math.max(0, paces[0] - paces.at(-1)!) : 0 }; }
 function formatPace(seconds: number) { if (!seconds) return "—"; return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}`; }
 function formatDuration(seconds: number) { const hours = Math.floor(seconds / 3600); const minutes = Math.floor((seconds % 3600) / 60); const secs = seconds % 60; return `${hours ? `${hours}:` : ""}${String(minutes).padStart(hours ? 2 : 1, "0")}:${String(secs).padStart(2, "0")}`; }

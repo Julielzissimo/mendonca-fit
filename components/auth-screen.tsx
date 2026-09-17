@@ -7,20 +7,26 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { supabase } from "@/lib/supabase";
+import { account } from "@/lib/appwrite";
+import type { Models } from "appwrite";
 
-export function AuthScreen() {
+export function AuthScreen({ onAuthenticated }: { onAuthenticated: (user: Models.User<Models.Preferences>) => void }) {
   const [loading, setLoading] = useState(false);
 
   async function authenticate(formData: FormData) {
-    if (!supabase) return;
     const email = String(formData.get("email") || "");
     const password = String(formData.get("password") || "");
     setLoading(true);
-    const result = await supabase.auth.signInWithPassword({ email, password });
-    setLoading(false);
-    if (result.error) return toast.error(result.error.message);
-    toast.success("Bem-vindo de volta.");
+    try {
+      await account.createEmailPasswordSession({ email, password });
+      const user = await account.get();
+      onAuthenticated(user);
+      toast.success("Bem-vindo de volta.");
+    } catch {
+      toast.error("E-mail ou senha inválidos.");
+    } finally {
+      setLoading(false);
+    }
   }
 
   return (
