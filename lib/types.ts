@@ -3,7 +3,6 @@ export type RunSplit = {
   run_id?: string;
   kilometer: number;
   split_seconds: number;
-  heart_rate: number;
 };
 
 export type Run = {
@@ -12,7 +11,6 @@ export type Run = {
   run_date: string;
   distance_km: number;
   duration_seconds: number;
-  avg_heart_rate: number;
   perceived_effort: number | null;
   notes: string | null;
   run_splits: RunSplit[];
@@ -43,7 +41,7 @@ export type RunDraft = {
   run_date: string;
   perceived_effort: number;
   notes: string;
-  splits: Array<{ kilometer: number; split_seconds: number; heart_rate: number }>;
+  splits: Array<{ kilometer: number; split_seconds: number }>;
 };
 
 export type WeightDraft = { entry_date: string; weight_kg: number };

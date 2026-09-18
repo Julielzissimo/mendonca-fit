@@ -6,7 +6,6 @@ import {
   ArrowDownRight,
   CalendarDays,
   Gauge,
-  HeartPulse,
   LogOut,
   Plus,
   Scale,
@@ -74,11 +73,10 @@ export function Dashboard({ userId, onSignOut }: { userId: string; onSignOut: ()
   const saveRun = useCallback(async (draft: RunDraft) => {
     const duration = draft.splits.reduce((sum, split) => sum + split.split_seconds, 0);
     const distance = getRunDistance(draft.splits);
-    const averageHeartRate = Math.round(draft.splits.reduce((sum, split) => sum + split.heart_rate * split.split_seconds, 0) / duration);
-    const baseRun = { run_date: toAppwriteDate(draft.run_date), distance_km: distance, duration_seconds: duration, avg_heart_rate: averageHeartRate, perceived_effort: draft.perceived_effort, notes: draft.notes || null, created_by: userId, athlete_id: selectedAthleteId };
+    const baseRun = { run_date: toAppwriteDate(draft.run_date), distance_km: distance, duration_seconds: duration, avg_heart_rate: 0, perceived_effort: draft.perceived_effort, notes: draft.notes || null, created_by: userId, athlete_id: selectedAthleteId };
     const run = await tablesDB.createRow({ databaseId: appwriteConfig.databaseId, tableId: appwriteConfig.tables.runs, rowId: ID.unique(), data: baseRun });
     try {
-      await Promise.all(draft.splits.map((split) => tablesDB.createRow({ databaseId: appwriteConfig.databaseId, tableId: appwriteConfig.tables.runSplits, rowId: ID.unique(), data: { ...split, run_id: run.$id, athlete_id: selectedAthleteId, created_by: userId } })));
+      await Promise.all(draft.splits.map((split) => tablesDB.createRow({ databaseId: appwriteConfig.databaseId, tableId: appwriteConfig.tables.runSplits, rowId: ID.unique(), data: { ...split, heart_rate: 0, run_id: run.$id, athlete_id: selectedAthleteId, created_by: userId } })));
       setRuns((current) => [...current, normalizeRun(run as unknown as Record<string, unknown>, draft.splits)].sort((a, b) => a.run_date.localeCompare(b.run_date)));
       toast.success("Corrida registrada.");
     } catch (error) {
@@ -119,7 +117,7 @@ export function Dashboard({ userId, onSignOut }: { userId: string; onSignOut: ()
   const targetWeight = activeAthlete?.target_weight_kg ?? 72;
   const weightLost = firstWeight !== null && currentWeight !== undefined ? firstWeight - currentWeight : null;
   const weightProgress = firstWeight && currentWeight && firstWeight !== targetWeight ? Math.max(0, Math.min(100, ((firstWeight - currentWeight) / (firstWeight - targetWeight)) * 100)) : 0;
-  const paceChart = visibleRuns.map((run) => ({ date: shortDate(run.run_date), pace: Math.round(run.duration_seconds / run.distance_km), bpm: run.avg_heart_rate }));
+  const paceChart = visibleRuns.map((run) => ({ date: shortDate(run.run_date), pace: Math.round(run.duration_seconds / run.distance_km) }));
   const weightChart = visibleWeights.map((entry) => ({ date: shortDate(entry.entry_date), weight: entry.weight_kg }));
   const recentRuns = [...visibleRuns].reverse().slice(0, 5);
 
@@ -160,10 +158,9 @@ export function Dashboard({ userId, onSignOut }: { userId: string; onSignOut: ()
           </div>
 
           <TabsContent value="overview" className="space-y-5">
-            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+            <div className="grid gap-3 sm:grid-cols-3">
               <Metric icon={<Gauge />} label="Ritmo médio" value={formatPace(metrics.averagePace)} unit="/km" meta={`${metrics.runCount} treinos registrados`} />
               <Metric icon={<Activity />} label="Distância total" value={formatDecimal(metrics.totalDistance)} unit="km" meta="No período exibido" />
-              <Metric icon={<HeartPulse />} label="FC média" value={String(metrics.averageHeartRate || "—")} unit={metrics.averageHeartRate ? "bpm" : ""} meta="Todos os treinos" />
               <Metric icon={<CalendarDays />} label="Tempo correndo" value={formatHours(metrics.totalDuration)} unit="" meta="Tempo acumulado" />
             </div>
 
@@ -194,9 +191,9 @@ export function Dashboard({ userId, onSignOut }: { userId: string; onSignOut: ()
             <div className="grid gap-5 xl:grid-cols-[1fr_360px]">
               <section className="overflow-hidden rounded-[24px] border border-white/10 bg-[#11151a]">
                 <div className="flex items-center justify-between p-6"><div><p className="text-sm text-white/45">Histórico completo</p><h2 className="text-2xl font-bold tracking-tight">Suas corridas</h2></div><Button onClick={() => setRunOpen(true)} className="bg-[#c7ff3f] font-bold text-[#101508] hover:bg-[#d5ff70]"><Plus /> Novo treino</Button></div>
-                <div className="overflow-x-auto"><table className="w-full min-w-[660px] text-left"><thead className="border-y border-white/[.07] bg-white/[.025] text-xs uppercase tracking-wider text-white/35"><tr><th className="px-6 py-3 font-semibold">Data</th><th className="px-4 py-3 font-semibold">Distância</th><th className="px-4 py-3 font-semibold">Tempo</th><th className="px-4 py-3 font-semibold">Ritmo</th><th className="px-4 py-3 font-semibold">FC média</th><th className="px-6 py-3 font-semibold">Esforço</th></tr></thead><tbody>{[...visibleRuns].reverse().map((run) => <tr key={run.id} className="border-b border-white/[.06] last:border-0"><td className="px-6 py-4 font-semibold">{longDate(run.run_date)}</td><td className="px-4 py-4">{formatDecimal(run.distance_km)} km</td><td className="px-4 py-4 font-mono text-sm">{formatDuration(run.duration_seconds)}</td><td className="px-4 py-4 font-mono font-bold text-[#c7ff3f]">{formatPace(Math.round(run.duration_seconds / run.distance_km))}</td><td className="px-4 py-4">{run.avg_heart_rate} bpm</td><td className="px-6 py-4">{run.perceived_effort ?? "—"}/10</td></tr>)}</tbody></table></div>
+                <div className="overflow-x-auto"><table className="w-full min-w-[580px] text-left"><thead className="border-y border-white/[.07] bg-white/[.025] text-xs uppercase tracking-wider text-white/35"><tr><th className="px-6 py-3 font-semibold">Data</th><th className="px-4 py-3 font-semibold">Distância</th><th className="px-4 py-3 font-semibold">Tempo</th><th className="px-4 py-3 font-semibold">Ritmo</th><th className="px-6 py-3 font-semibold">Esforço</th></tr></thead><tbody>{[...visibleRuns].reverse().map((run) => <tr key={run.id} className="border-b border-white/[.06] last:border-0"><td className="px-6 py-4 font-semibold">{longDate(run.run_date)}</td><td className="px-4 py-4">{formatDecimal(run.distance_km)} km</td><td className="px-4 py-4 font-mono text-sm">{formatDuration(run.duration_seconds)}</td><td className="px-4 py-4 font-mono font-bold text-[#c7ff3f]">{formatPace(Math.round(run.duration_seconds / run.distance_km))}</td><td className="px-6 py-4">{run.perceived_effort ?? "—"}/10</td></tr>)}</tbody></table></div>
               </section>
-              <section className="rounded-[24px] border border-white/10 bg-[#11151a] p-6"><div className="grid size-11 place-items-center rounded-xl bg-[#c7ff3f]/10 text-[#c7ff3f]"><Target /></div><p className="mt-8 text-sm text-white/45">Melhor ritmo médio</p><p className="mt-1 text-5xl font-black tracking-[-.06em]">{formatPace(metrics.bestPace)} <span className="text-base text-white/35">/km</span></p><p className="mt-6 border-t border-white/[.07] pt-5 text-sm leading-relaxed text-white/45">Confira as parciais no cadastro para entender em quais quilômetros seu ritmo e sua frequência variam mais.</p></section>
+              <section className="rounded-[24px] border border-white/10 bg-[#11151a] p-6"><div className="grid size-11 place-items-center rounded-xl bg-[#c7ff3f]/10 text-[#c7ff3f]"><Target /></div><p className="mt-8 text-sm text-white/45">Melhor ritmo médio</p><p className="mt-1 text-5xl font-black tracking-[-.06em]">{formatPace(metrics.bestPace)} <span className="text-base text-white/35">/km</span></p><p className="mt-6 border-t border-white/[.07] pt-5 text-sm leading-relaxed text-white/45">Confira as parciais no cadastro para entender em quais quilômetros seu ritmo varia mais.</p></section>
             </div>
           </TabsContent>
 
@@ -219,16 +216,16 @@ export function Dashboard({ userId, onSignOut }: { userId: string; onSignOut: ()
 
 function Metric({ icon, label, value, unit, meta }: { icon: React.ReactNode; label: string; value: string; unit: string; meta: string }) { return <div className="rounded-[20px] border border-white/10 bg-white/[.035] p-5"><div className="flex items-center justify-between text-white/45"><span className="[&_svg]:size-4">{icon}</span><span className="text-xs">{label}</span></div><p className="mt-6 text-3xl font-black tracking-[-0.04em]">{value} <span className="text-sm font-medium text-white/40">{unit}</span></p><p className="mt-1.5 text-xs text-white/40">{meta}</p></div>; }
 function ChartCard({ title, subtitle, badge, children }: { title: string; subtitle: string; badge?: string; children: React.ReactNode }) { return <section className="overflow-hidden rounded-[24px] border border-white/10 bg-[#11151a] p-5 sm:p-7"><div className="mb-3 flex items-start justify-between gap-4"><div><p className="text-sm text-white/45">{subtitle}</p><h2 className="mt-1 text-2xl font-bold tracking-tight">{title}</h2></div>{badge && <span className="rounded-full bg-[#c7ff3f]/10 px-3 py-1.5 text-xs font-bold text-[#c7ff3f]">{badge}</span>}</div>{children}</section>; }
-function RunRow({ run }: { run: Run }) { const pace = Math.round(run.duration_seconds / run.distance_km); return <div className="flex items-center gap-3 border-t border-white/[.07] py-3.5 first:border-t-0 md:[&:nth-child(2)]:border-t-0"><div className="grid size-10 shrink-0 place-items-center rounded-xl bg-white/[.05] text-sm font-bold">{new Date(`${run.run_date}T12:00:00`).getDate().toString().padStart(2, "0")}</div><div className="min-w-0 flex-1"><p className="font-semibold">{formatDecimal(run.distance_km)} km</p><p className="truncate text-xs text-white/40">{run.notes || `${run.avg_heart_rate} bpm médio`}</p></div><div className="text-right"><p className="font-mono font-bold text-[#c7ff3f]">{formatPace(pace)}</p><p className="text-[11px] text-white/35">min/km</p></div></div>; }
+function RunRow({ run }: { run: Run }) { const pace = Math.round(run.duration_seconds / run.distance_km); return <div className="flex items-center gap-3 border-t border-white/[.07] py-3.5 first:border-t-0 md:[&:nth-child(2)]:border-t-0"><div className="grid size-10 shrink-0 place-items-center rounded-xl bg-white/[.05] text-sm font-bold">{new Date(`${run.run_date}T12:00:00`).getDate().toString().padStart(2, "0")}</div><div className="min-w-0 flex-1"><p className="font-semibold">{formatDecimal(run.distance_km)} km</p><p className="truncate text-xs text-white/40">{run.notes || `Esforço ${run.perceived_effort ?? "—"}/10`}</p></div><div className="text-right"><p className="font-mono font-bold text-[#c7ff3f]">{formatPace(pace)}</p><p className="text-[11px] text-white/35">min/km</p></div></div>; }
 function EmptyState({ action }: { action: () => void }) { return <div className="grid min-h-48 place-items-center rounded-2xl border border-dashed border-white/10 text-center"><div><Activity className="mx-auto size-7 text-white/25" /><p className="mt-3 font-semibold">Nenhuma corrida ainda</p><p className="mt-1 text-sm text-white/40">Registre seu primeiro treino para ver as métricas.</p><Button onClick={action} variant="outline" className="mt-4 border-white/10 bg-white/[.03] text-white hover:bg-white/10 hover:text-white">Registrar corrida</Button></div></div>; }
-function LoadingDashboard() { return <main className="min-h-screen bg-[#080a0d] p-6 text-white"><div className="mx-auto max-w-[1340px] space-y-6"><Skeleton className="h-14 bg-white/[.06]" /><Skeleton className="h-24 bg-white/[.06]" /><div className="grid gap-3 md:grid-cols-4">{[1,2,3,4].map((item) => <Skeleton key={item} className="h-36 bg-white/[.06]" />)}</div><Skeleton className="h-80 bg-white/[.06]" /></div></main>; }
+function LoadingDashboard() { return <main className="min-h-screen bg-[#080a0d] p-6 text-white"><div className="mx-auto max-w-[1340px] space-y-6"><Skeleton className="h-14 bg-white/[.06]" /><Skeleton className="h-24 bg-white/[.06]" /><div className="grid gap-3 md:grid-cols-3">{[1,2,3].map((item) => <Skeleton key={item} className="h-36 bg-white/[.06]" />)}</div><Skeleton className="h-80 bg-white/[.06]" /></div></main>; }
 function PaceTooltip({ active, payload, label }: { active?: boolean; payload?: Array<{ value: number }>; label?: string }) { if (!active || !payload?.length) return null; return <div className="rounded-xl border border-white/10 bg-[#171b20] px-3 py-2 text-xs shadow-xl"><p className="text-white/40">{label}</p><p className="mt-1 font-mono font-bold text-[#c7ff3f]">{formatPace(payload[0].value)} /km</p></div>; }
 
-function normalizeRun(run: Record<string, unknown>, splits: Run["run_splits"] = []): Run { return { id: String(run.$id), athlete_id: String(run.athlete_id), run_date: fromAppwriteDate(run.run_date), distance_km: Number(run.distance_km), duration_seconds: Number(run.duration_seconds), avg_heart_rate: Number(run.avg_heart_rate), perceived_effort: run.perceived_effort == null ? null : Number(run.perceived_effort), notes: run.notes == null ? null : String(run.notes), run_splits: splits }; }
-function normalizeSplit(split: Record<string, unknown>): Run["run_splits"][number] { return { id: String(split.$id), run_id: String(split.run_id), kilometer: Number(split.kilometer), split_seconds: Number(split.split_seconds), heart_rate: Number(split.heart_rate) }; }
+function normalizeRun(run: Record<string, unknown>, splits: Run["run_splits"] = []): Run { return { id: String(run.$id), athlete_id: String(run.athlete_id), run_date: fromAppwriteDate(run.run_date), distance_km: Number(run.distance_km), duration_seconds: Number(run.duration_seconds), perceived_effort: run.perceived_effort == null ? null : Number(run.perceived_effort), notes: run.notes == null ? null : String(run.notes), run_splits: splits }; }
+function normalizeSplit(split: Record<string, unknown>): Run["run_splits"][number] { return { id: String(split.$id), run_id: String(split.run_id), kilometer: Number(split.kilometer), split_seconds: Number(split.split_seconds) }; }
 function normalizeWeight(entry: Record<string, unknown>): WeightEntry { return { id: String(entry.$id), athlete_id: String(entry.athlete_id), entry_date: fromAppwriteDate(entry.entry_date), weight_kg: Number(entry.weight_kg) }; }
 function normalizeAthlete(entry: Record<string, unknown>): Athlete { return { id: String(entry.$id), name: String(entry.name), birth_date: entry.birth_date ? fromAppwriteDate(entry.birth_date) : null, start_weight_kg: numberOrNull(entry.start_weight_kg), target_weight_kg: numberOrNull(entry.target_weight_kg) }; }
-function calculateMetrics(runs: Run[]) { const totalDistance = runs.reduce((sum, run) => sum + run.distance_km, 0); const totalDuration = runs.reduce((sum, run) => sum + run.duration_seconds, 0); const averagePace = totalDistance ? Math.round(totalDuration / totalDistance) : 0; const averageHeartRate = runs.length ? Math.round(runs.reduce((sum, run) => sum + run.avg_heart_rate, 0) / runs.length) : 0; const paces = runs.map((run) => Math.round(run.duration_seconds / run.distance_km)); return { totalDistance, totalDuration, averagePace, averageHeartRate, runCount: runs.length, bestPace: paces.length ? Math.min(...paces) : 0, paceGain: paces.length > 1 ? Math.max(0, paces[0] - paces.at(-1)!) : 0 }; }
+function calculateMetrics(runs: Run[]) { const totalDistance = runs.reduce((sum, run) => sum + run.distance_km, 0); const totalDuration = runs.reduce((sum, run) => sum + run.duration_seconds, 0); const averagePace = totalDistance ? Math.round(totalDuration / totalDistance) : 0; const paces = runs.map((run) => Math.round(run.duration_seconds / run.distance_km)); return { totalDistance, totalDuration, averagePace, runCount: runs.length, bestPace: paces.length ? Math.min(...paces) : 0, paceGain: paces.length > 1 ? Math.max(0, paces[0] - paces.at(-1)!) : 0 }; }
 function formatPace(seconds: number) { if (!seconds) return "—"; return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}`; }
 function formatDuration(seconds: number) { const hours = Math.floor(seconds / 3600); const minutes = Math.floor((seconds % 3600) / 60); const secs = seconds % 60; return `${hours ? `${hours}:` : ""}${String(minutes).padStart(hours ? 2 : 1, "0")}:${String(secs).padStart(2, "0")}`; }
 function formatHours(seconds: number) { const hours = Math.floor(seconds / 3600); const minutes = Math.floor((seconds % 3600) / 60); return hours ? `${hours}h ${minutes}min` : `${minutes}min`; }
@@ -268,7 +265,7 @@ function useWebMcp(saveRun: (draft: RunDraft) => Promise<void>, saveWeight: (dra
     const runTool = {
       name: "record_run",
       title: "Registrar corrida",
-      description: "Registra uma corrida com tempo e frequência cardíaca por trecho. O campo kilometer indica a distância acumulada e pode terminar em uma parcial, como 6.6 km.",
+      description: "Registra uma corrida com o tempo por trecho. O campo kilometer indica a distância acumulada e pode terminar em uma parcial, como 6.6 km.",
       inputSchema: {
         type: "object",
         properties: {
@@ -283,9 +280,8 @@ function useWebMcp(saveRun: (draft: RunDraft) => Promise<void>, saveWeight: (dra
               properties: {
                 kilometer: { type: "number", exclusiveMinimum: 0 },
                 split_seconds: { type: "integer", minimum: 1, maximum: 3600 },
-                heart_rate: { type: "integer", minimum: 30, maximum: 240 },
               },
-              required: ["kilometer", "split_seconds", "heart_rate"],
+              required: ["kilometer", "split_seconds"],
               additionalProperties: false,
             },
           },

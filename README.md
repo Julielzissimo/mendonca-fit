@@ -12,8 +12,8 @@ O workflow `.github/workflows/deploy-pages.yml` recompila e publica automaticame
 
 - login único e sem cadastro público;
 - cadastro e seleção de diferentes pessoas;
-- corrida com tempo e frequência cardíaca por quilômetro;
-- métricas de ritmo, distância, tempo total e frequência cardíaca;
+- corrida com tempo por quilômetro;
+- métricas de ritmo, distância e tempo total;
 - registro diário de peso, meta e evolução;
 - histórico e gráficos separados por pessoa;
 - banco e autenticação no Appwrite;

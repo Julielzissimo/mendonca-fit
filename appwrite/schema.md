@@ -19,7 +19,7 @@ Todas as tabelas têm permissões `create`, `read`, `update` e `delete` para `us
 - `run_date`: datetime, obrigatório
 - `distance_km`: double, obrigatório
 - `duration_seconds`: integer, obrigatório
-- `avg_heart_rate`: integer, obrigatório
+- `avg_heart_rate`: integer, obrigatório no esquema legado; o frontend grava `0` apenas por compatibilidade e não expõe o campo
 - `perceived_effort`: integer, 1–10
 - `notes`: varchar(500)
 - `created_by`: varchar(36), obrigatório
@@ -31,7 +31,7 @@ Todas as tabelas têm permissões `create`, `read`, `update` e `delete` para `us
 - `athlete_id`: varchar(36), obrigatório
 - `kilometer`: double, obrigatório; representa a distância acumulada ao fim da parcial (por exemplo: `1`, `2`, ..., `6`, `6.6`)
 - `split_seconds`: integer, obrigatório
-- `heart_rate`: integer, obrigatório
+- `heart_rate`: integer, obrigatório no esquema legado; o frontend grava `0` apenas por compatibilidade e não expõe o campo
 - `created_by`: varchar(36), obrigatório
 - índices `splits_run_km_idx` e `splits_athlete_idx`
 

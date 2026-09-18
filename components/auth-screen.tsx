@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Activity, ArrowRight, HeartPulse, Scale, TrendingUp } from "lucide-react";
+import { Activity, ArrowRight, CalendarDays, Scale, TrendingUp } from "lucide-react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
@@ -80,10 +80,10 @@ export function AuthScreen({ onAuthenticated }: { onAuthenticated: (user: Models
         <div className="relative max-w-xl">
           <p className="mb-4 text-sm font-bold uppercase tracking-[.16em] text-[#c7ff3f]">Seu histórico. Seu ritmo.</p>
           <h1 className="text-6xl font-black leading-[.92] tracking-[-.065em]">Cada quilômetro conta uma história.</h1>
-          <p className="mt-7 max-w-md text-lg leading-relaxed text-white/55">Acompanhe ritmo, frequência cardíaca e peso em um único painel pensado para sua evolução.</p>
+          <p className="mt-7 max-w-md text-lg leading-relaxed text-white/55">Acompanhe ritmo e peso em um único painel pensado para sua evolução.</p>
         </div>
         <div className="relative grid grid-cols-3 gap-3">
-          {[{ icon: Activity, label: "Ritmo por km" }, { icon: HeartPulse, label: "Frequência" }, { icon: Scale, label: "Peso diário" }].map(({ icon: Icon, label }) => (
+          {[{ icon: Activity, label: "Ritmo por km" }, { icon: CalendarDays, label: "Tempo total" }, { icon: Scale, label: "Peso diário" }].map(({ icon: Icon, label }) => (
             <div key={label} className="rounded-2xl border border-white/10 bg-white/[.035] p-4"><Icon className="mb-8 size-5 text-[#c7ff3f]" /><p className="text-sm font-semibold">{label}</p></div>
           ))}
         </div>

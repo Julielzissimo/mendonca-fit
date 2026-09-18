@@ -5,7 +5,7 @@ import "./globals.css";
 
 export const metadata: Metadata = {
   title: "Mendonça Fit — Corrida & evolução",
-  description: "Registre suas corridas, acompanhe ritmo, frequência cardíaca e evolução de peso.",
+  description: "Registre suas corridas, acompanhe ritmo e evolução de peso.",
   icons: { icon: "/favicon.svg", shortcut: "/favicon.svg" },
 };
 

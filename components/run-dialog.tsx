@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { HeartPulse, Plus, TimerReset, Trash2 } from "lucide-react";
+import { Plus, TimerReset, Trash2 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -11,8 +11,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Textarea } from "@/components/ui/textarea";
 import type { RunDraft } from "@/lib/types";
 
-type SplitInput = { distance: string; minutes: string; seconds: string; heartRate: string; partial: boolean };
-const emptySplit = (partial = false): SplitInput => ({ distance: partial ? "0,1" : "1", minutes: partial ? "0" : "5", seconds: "30", heartRate: "150", partial });
+type SplitInput = { distance: string; minutes: string; seconds: string; partial: boolean };
+const emptySplit = (partial = false): SplitInput => ({ distance: partial ? "0,1" : "1", minutes: partial ? "0" : "5", seconds: "30", partial });
 const parseDistance = (value: string) => Number(value.replace(",", ".")) || 0;
 const formatDistance = (value: number) => value.toLocaleString("pt-BR", { maximumFractionDigits: 1 });
 
@@ -37,12 +37,12 @@ export function RunDialog({ open, onOpenChange, onSave }: { open: boolean; onOpe
     let cumulativeDistance = 0;
     const normalized = splits.map((split) => {
       cumulativeDistance += parseDistance(split.distance);
-      return { kilometer: Math.round(cumulativeDistance * 10) / 10, split_seconds: Number(split.minutes) * 60 + Number(split.seconds), heart_rate: Number(split.heartRate) };
+      return { kilometer: Math.round(cumulativeDistance * 10) / 10, split_seconds: Number(split.minutes) * 60 + Number(split.seconds) };
     });
     if (splits.some((split) => {
       const distance = parseDistance(split.distance);
       return distance <= 0 || distance > 1 || (split.partial && (distance >= 1 || distance * 10 % 1 !== 0));
-    }) || normalized.some((split) => split.split_seconds < 1 || split.heart_rate < 30 || split.heart_rate > 240)) return;
+    }) || normalized.some((split) => split.split_seconds < 1)) return;
     setSaving(true);
     try {
       await onSave({ run_date: date, perceived_effort: Number(effort), notes, splits: normalized });
@@ -56,7 +56,7 @@ export function RunDialog({ open, onOpenChange, onSave }: { open: boolean; onOpe
       <DialogContent className="max-h-[92vh] overflow-y-auto border-white/10 bg-[#11151a] text-white sm:max-w-2xl">
         <DialogHeader>
           <DialogTitle className="text-2xl tracking-[-.03em]">Registrar corrida</DialogTitle>
-          <DialogDescription>Informe o tempo e a frequência cardíaca de cada quilômetro.</DialogDescription>
+          <DialogDescription>Informe o tempo de cada quilômetro.</DialogDescription>
         </DialogHeader>
         <form onSubmit={submit} className="space-y-6">
           <div className="grid gap-4 sm:grid-cols-2">
@@ -73,12 +73,11 @@ export function RunDialog({ open, onOpenChange, onSave }: { open: boolean; onOpe
               </div>
             </div>
             <div className="overflow-hidden rounded-2xl border border-white/10">
-              <div className="grid grid-cols-[72px_1fr_1fr_40px] gap-3 bg-white/[.04] px-3 py-2 text-xs font-semibold text-white/45"><span>Trecho</span><span>Tempo</span><span>FC média</span><span /></div>
+              <div className="grid grid-cols-[72px_1fr_40px] gap-3 bg-white/[.04] px-3 py-2 text-xs font-semibold text-white/45"><span>Trecho</span><span>Tempo</span><span /></div>
               {splits.map((split, index) => (
-                <div key={index} className="grid grid-cols-[72px_1fr_1fr_40px] items-center gap-3 border-t border-white/[.07] px-3 py-2.5">
+                <div key={index} className="grid grid-cols-[72px_1fr_40px] items-center gap-3 border-t border-white/[.07] px-3 py-2.5">
                   {split.partial ? <div className="relative"><Input aria-label="Distância da parcial em quilômetros" inputMode="decimal" required pattern="0[,.][1-9]" title="Informe uma distância entre 0,1 e 0,9 km" maxLength={3} value={split.distance} onChange={(e) => updateSplit(index, "distance", e.target.value)} className="h-9 bg-white/[.03] pr-7 text-center font-mono font-bold text-[#c7ff3f]" /><span className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-[10px] text-white/35">km</span></div> : <span className="font-mono font-bold text-[#c7ff3f]">{String(index + 1).padStart(2, "0")}</span>}
                   <div className="flex items-center gap-1.5"><Input aria-label={`Minutos do trecho ${index + 1}`} type="number" min="0" max="59" value={split.minutes} onChange={(e) => updateSplit(index, "minutes", e.target.value)} className="h-9 min-w-0 bg-white/[.03] text-center" /><span className="text-white/35">:</span><Input aria-label={`Segundos do trecho ${index + 1}`} type="number" min="0" max="59" value={split.seconds} onChange={(e) => updateSplit(index, "seconds", e.target.value)} className="h-9 min-w-0 bg-white/[.03] text-center" /></div>
-                  <div className="relative"><HeartPulse className="absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-white/35" /><Input aria-label={`Frequência cardíaca do km ${index + 1}`} type="number" min="30" max="240" value={split.heartRate} onChange={(e) => updateSplit(index, "heartRate", e.target.value)} className="h-9 bg-white/[.03] pl-8" /></div>
                   <Button type="button" variant="ghost" size="icon-sm" disabled={splits.length === 1} onClick={() => setSplits((current) => current.filter((_, splitIndex) => splitIndex !== index))} className="text-white/35 hover:bg-red-500/10 hover:text-red-400" aria-label={`Remover km ${index + 1}`}><Trash2 /></Button>
                 </div>
               ))}
