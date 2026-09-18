@@ -1,4 +1,4 @@
-import { Account, Client, ID, Query, TablesDB } from "appwrite";
+import { Account, Client, ID, Permission, Query, Role, TablesDB } from "appwrite";
 
 const publicEnv: Record<string, string | undefined> = typeof process !== "undefined" ? process.env : {};
 
@@ -25,7 +25,12 @@ export const appwriteClient = new Client()
 export const account = new Account(appwriteClient);
 export const tablesDB = new TablesDB(appwriteClient);
 
-export { ID, Query };
+export { ID, Permission, Query, Role };
+
+export function ownerPermissions(userId: string) {
+  const owner = Role.user(userId);
+  return [Permission.read(owner), Permission.update(owner), Permission.delete(owner)];
+}
 
 export function toAppwriteDate(date: string) {
   return `${date.slice(0, 10)}T12:00:00.000Z`;

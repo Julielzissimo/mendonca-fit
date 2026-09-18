@@ -1,6 +1,6 @@
 # Mendonça Fit
 
-Painel privado para acompanhar corrida e emagrecimento de várias pessoas em um único espaço compartilhado.
+Painel privado para acompanhar corrida e emagrecimento, com dados isolados por login.
 
 ## Site publicado
 
@@ -10,8 +10,8 @@ O workflow `.github/workflows/deploy-pages.yml` recompila e publica automaticame
 
 ## Funcionalidades
 
-- login único e sem cadastro público;
-- cadastro e seleção de diferentes pessoas;
+- login sem cadastro público;
+- cadastro e seleção de perfis pertencentes ao usuário autenticado;
 - corrida com tempo por quilômetro;
 - métricas de ritmo, distância e tempo total;
 - registro diário de peso, meta e evolução;
@@ -35,11 +35,11 @@ O projeto usa os recursos públicos de configuração definidos em `lib/appwrite
 - tabelas: `athletes`, `runs`, `run_splits` e `weight_entries`;
 - endpoint: `https://fra.cloud.appwrite.io/v1`.
 
-Os domínios `localhost`, `mendonca-fit.juliel-mendonca.chatgpt.site` e `julielzissimo.github.io` estão registrados como aplicativos Web. As tabelas aceitam leitura e escrita apenas para o papel `users` (pessoas autenticadas).
+Os domínios `localhost`, `mendonca-fit.juliel-mendonca.chatgpt.site` e `julielzissimo.github.io` estão registrados como aplicativos Web. As tabelas permitem que pessoas autenticadas criem linhas, mas leitura, alteração e exclusão ficam restritas ao proprietário de cada linha. Todas as consultas também exigem que `created_by` corresponda ao login atual.
 
-## Acesso compartilhado
+## Acesso
 
-O formulário público permite somente entrar. Crie manualmente um único usuário em **Appwrite Console → Auth → Users**, com o e-mail e a senha que serão compartilhados entre as pessoas autorizadas.
+O formulário público permite somente entrar. Crie manualmente um usuário para cada pessoa em **Appwrite Console → Auth → Users**; cada login acessa apenas seus próprios perfis e lançamentos.
 
 ## Desenvolvimento
 

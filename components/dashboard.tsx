@@ -23,7 +23,7 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { account, appwriteConfig, fromAppwriteDate, ID, Query, tablesDB, toAppwriteDate } from "@/lib/appwrite";
+import { account, appwriteConfig, fromAppwriteDate, ID, ownerPermissions, Query, tablesDB, toAppwriteDate } from "@/lib/appwrite";
 import type { Athlete, AthleteDraft, Run, RunDraft, WeightDraft, WeightEntry } from "@/lib/types";
 
 const dateFormatter = new Intl.DateTimeFormat("pt-BR", { day: "2-digit", month: "short" });
@@ -39,44 +39,47 @@ export function Dashboard({ userId, onSignOut }: { userId: string; onSignOut: ()
   const [weightOpen, setWeightOpen] = useState(false);
   const [athleteOpen, setAthleteOpen] = useState(false);
 
-  const loadData = useCallback(async () => {
-    setLoading(true);
-    try {
-      const [runsResult, splitsResult, weightsResult, athletesResult] = await Promise.all([
-        tablesDB.listRows({ databaseId: appwriteConfig.databaseId, tableId: appwriteConfig.tables.runs, queries: [Query.limit(5000)] }),
-        tablesDB.listRows({ databaseId: appwriteConfig.databaseId, tableId: appwriteConfig.tables.runSplits, queries: [Query.limit(5000)] }),
-        tablesDB.listRows({ databaseId: appwriteConfig.databaseId, tableId: appwriteConfig.tables.weightEntries, queries: [Query.limit(5000)] }),
-        tablesDB.listRows({ databaseId: appwriteConfig.databaseId, tableId: appwriteConfig.tables.athletes, queries: [Query.limit(5000)] }),
-      ]);
-      const splitsByRun = new Map<string, Run["run_splits"]>();
-      for (const row of splitsResult.rows) {
-        const split = normalizeSplit(row as unknown as Record<string, unknown>);
-        const current = splitsByRun.get(String(row.run_id)) || [];
-        current.push(split);
-        splitsByRun.set(String(row.run_id), current);
+  useEffect(() => {
+    async function loadData() {
+      try {
+        const ownerQuery = Query.equal("created_by", userId);
+        const [runsResult, splitsResult, weightsResult, athletesResult] = await Promise.all([
+          tablesDB.listRows({ databaseId: appwriteConfig.databaseId, tableId: appwriteConfig.tables.runs, queries: [ownerQuery, Query.limit(5000)] }),
+          tablesDB.listRows({ databaseId: appwriteConfig.databaseId, tableId: appwriteConfig.tables.runSplits, queries: [ownerQuery, Query.limit(5000)] }),
+          tablesDB.listRows({ databaseId: appwriteConfig.databaseId, tableId: appwriteConfig.tables.weightEntries, queries: [ownerQuery, Query.limit(5000)] }),
+          tablesDB.listRows({ databaseId: appwriteConfig.databaseId, tableId: appwriteConfig.tables.athletes, queries: [ownerQuery, Query.limit(5000)] }),
+        ]);
+        const splitsByRun = new Map<string, Run["run_splits"]>();
+        for (const row of splitsResult.rows) {
+          const split = normalizeSplit(row as unknown as Record<string, unknown>);
+          const current = splitsByRun.get(String(row.run_id)) || [];
+          current.push(split);
+          splitsByRun.set(String(row.run_id), current);
+        }
+        for (const splits of splitsByRun.values()) splits.sort((a, b) => a.kilometer - b.kilometer);
+        setRuns(runsResult.rows.map((row) => normalizeRun(row as unknown as Record<string, unknown>, splitsByRun.get(row.$id) || [])).sort((a, b) => a.run_date.localeCompare(b.run_date)));
+        setWeights(weightsResult.rows.map((row) => normalizeWeight(row as unknown as Record<string, unknown>)).sort((a, b) => a.entry_date.localeCompare(b.entry_date)));
+        const loadedAthletes = athletesResult.rows.map((row) => normalizeAthlete(row as unknown as Record<string, unknown>)).sort((a, b) => a.name.localeCompare(b.name));
+        setAthletes(loadedAthletes);
+        setSelectedAthleteId((current) => current && loadedAthletes.some((athlete) => athlete.id === current) ? current : loadedAthletes[0]?.id || "");
+      } catch {
+        toast.error("Não foi possível carregar seus dados.");
+      } finally {
+        setLoading(false);
       }
-      for (const splits of splitsByRun.values()) splits.sort((a, b) => a.kilometer - b.kilometer);
-      setRuns(runsResult.rows.map((row) => normalizeRun(row as unknown as Record<string, unknown>, splitsByRun.get(row.$id) || [])).sort((a, b) => a.run_date.localeCompare(b.run_date)));
-      setWeights(weightsResult.rows.map((row) => normalizeWeight(row as unknown as Record<string, unknown>)).sort((a, b) => a.entry_date.localeCompare(b.entry_date)));
-      const loadedAthletes = athletesResult.rows.map((row) => normalizeAthlete(row as unknown as Record<string, unknown>)).sort((a, b) => a.name.localeCompare(b.name));
-      setAthletes(loadedAthletes);
-      setSelectedAthleteId((current) => current && loadedAthletes.some((athlete) => athlete.id === current) ? current : loadedAthletes[0]?.id || "");
-    } catch {
-      toast.error("Não foi possível carregar seus dados.");
-    } finally {
-      setLoading(false);
     }
-  }, []);
 
-  useEffect(() => { void loadData(); }, [loadData]);
+    void loadData();
+  }, [userId]);
 
   const saveRun = useCallback(async (draft: RunDraft) => {
     const duration = draft.splits.reduce((sum, split) => sum + split.split_seconds, 0);
     const distance = getRunDistance(draft.splits);
     const baseRun = { run_date: toAppwriteDate(draft.run_date), distance_km: distance, duration_seconds: duration, avg_heart_rate: 0, perceived_effort: draft.perceived_effort, notes: draft.notes || null, created_by: userId, athlete_id: selectedAthleteId };
-    const run = await tablesDB.createRow({ databaseId: appwriteConfig.databaseId, tableId: appwriteConfig.tables.runs, rowId: ID.unique(), data: baseRun });
+    const permissions = ownerPermissions(userId);
+    const run = await tablesDB.createRow({ databaseId: appwriteConfig.databaseId, tableId: appwriteConfig.tables.runs, rowId: ID.unique(), data: baseRun, permissions });
     try {
-      await Promise.all(draft.splits.map((split) => tablesDB.createRow({ databaseId: appwriteConfig.databaseId, tableId: appwriteConfig.tables.runSplits, rowId: ID.unique(), data: { ...split, heart_rate: 0, run_id: run.$id, athlete_id: selectedAthleteId, created_by: userId } })));
+      await Promise.all(draft.splits.map((split) => tablesDB.createRow({ databaseId: appwriteConfig.databaseId, tableId: appwriteConfig.tables.runSplits, rowId: ID.unique(), data: { ...split, heart_rate: 0, run_id: run.$id, athlete_id: selectedAthleteId, created_by: userId }, permissions })));
       setRuns((current) => [...current, normalizeRun(run as unknown as Record<string, unknown>, draft.splits)].sort((a, b) => a.run_date.localeCompare(b.run_date)));
       toast.success("Corrida registrada.");
     } catch (error) {
@@ -88,18 +91,19 @@ export function Dashboard({ userId, onSignOut }: { userId: string; onSignOut: ()
 
   const saveWeight = useCallback(async (draft: WeightDraft) => {
     const entryDate = toAppwriteDate(draft.entry_date);
-    const existing = await tablesDB.listRows({ databaseId: appwriteConfig.databaseId, tableId: appwriteConfig.tables.weightEntries, queries: [Query.equal("athlete_id", selectedAthleteId), Query.equal("entry_date", entryDate), Query.limit(1)] });
+    const existing = await tablesDB.listRows({ databaseId: appwriteConfig.databaseId, tableId: appwriteConfig.tables.weightEntries, queries: [Query.equal("created_by", userId), Query.equal("athlete_id", selectedAthleteId), Query.equal("entry_date", entryDate), Query.limit(1)] });
     const data = { athlete_id: selectedAthleteId, entry_date: entryDate, weight_kg: draft.weight_kg, created_by: userId };
+    const permissions = ownerPermissions(userId);
     const row = existing.rows[0]
-      ? await tablesDB.updateRow({ databaseId: appwriteConfig.databaseId, tableId: appwriteConfig.tables.weightEntries, rowId: existing.rows[0].$id, data })
-      : await tablesDB.createRow({ databaseId: appwriteConfig.databaseId, tableId: appwriteConfig.tables.weightEntries, rowId: ID.unique(), data });
+      ? await tablesDB.updateRow({ databaseId: appwriteConfig.databaseId, tableId: appwriteConfig.tables.weightEntries, rowId: existing.rows[0].$id, data, permissions })
+      : await tablesDB.createRow({ databaseId: appwriteConfig.databaseId, tableId: appwriteConfig.tables.weightEntries, rowId: ID.unique(), data, permissions });
     const normalized = normalizeWeight(row as unknown as Record<string, unknown>);
     setWeights((current) => [...current.filter((entry) => entry.entry_date !== draft.entry_date || entry.athlete_id !== selectedAthleteId), normalized].sort((a, b) => a.entry_date.localeCompare(b.entry_date)));
     toast.success("Peso registrado.");
   }, [selectedAthleteId, userId]);
 
   const saveAthlete = useCallback(async (draft: AthleteDraft) => {
-    const row = await tablesDB.createRow({ databaseId: appwriteConfig.databaseId, tableId: appwriteConfig.tables.athletes, rowId: ID.unique(), data: { ...draft, birth_date: draft.birth_date ? toAppwriteDate(draft.birth_date) : null, created_by: userId } });
+    const row = await tablesDB.createRow({ databaseId: appwriteConfig.databaseId, tableId: appwriteConfig.tables.athletes, rowId: ID.unique(), data: { ...draft, birth_date: draft.birth_date ? toAppwriteDate(draft.birth_date) : null, created_by: userId }, permissions: ownerPermissions(userId) });
     const athlete = normalizeAthlete(row as unknown as Record<string, unknown>);
     setAthletes((current) => [...current, athlete].sort((a, b) => a.name.localeCompare(b.name)));
     setSelectedAthleteId(athlete.id);

@@ -2,7 +2,7 @@
 
 Database: `Mendonça Fit Data` (`6aabf1350013c770ea82`), tipo TablesDB.
 
-Todas as tabelas têm permissões `create`, `read`, `update` e `delete` para `users`. O sistema usa o identificador nativo `$id` do Appwrite.
+Todas as tabelas têm segurança por linha habilitada. No nível da tabela, `users` recebe somente `create`; cada linha concede `read`, `update` e `delete` apenas ao usuário indicado em `created_by`. O frontend também filtra todas as consultas por `created_by`, mantendo cada login restrito ao próprio perfil esportivo. O sistema usa o identificador nativo `$id` do Appwrite.
 
 ## athletes
 
@@ -11,7 +11,7 @@ Todas as tabelas têm permissões `create`, `read`, `update` e `delete` para `us
 - `start_weight_kg`: double
 - `target_weight_kg`: double
 - `created_by`: varchar(36), obrigatório
-- índice `athletes_name_idx` em `name`
+- índices `athletes_name_idx` em `name` e `athletes_created_by_idx` em `created_by`
 
 ## runs
 
@@ -23,7 +23,7 @@ Todas as tabelas têm permissões `create`, `read`, `update` e `delete` para `us
 - `perceived_effort`: integer, 1–10
 - `notes`: varchar(500)
 - `created_by`: varchar(36), obrigatório
-- índice `runs_athlete_date_idx` em `athlete_id`, `run_date`
+- índices `runs_athlete_date_idx` em `athlete_id`, `run_date` e `runs_created_by_idx` em `created_by`
 
 ## run_splits
 
@@ -33,7 +33,7 @@ Todas as tabelas têm permissões `create`, `read`, `update` e `delete` para `us
 - `split_seconds`: integer, obrigatório
 - `heart_rate`: integer, obrigatório no esquema legado; o frontend grava `0` apenas por compatibilidade e não expõe o campo
 - `created_by`: varchar(36), obrigatório
-- índices `splits_run_km_idx` e `splits_athlete_idx`
+- índices `splits_run_km_idx`, `splits_athlete_idx` e `splits_created_by_idx`
 
 ## weight_entries
 
@@ -41,4 +41,4 @@ Todas as tabelas têm permissões `create`, `read`, `update` e `delete` para `us
 - `entry_date`: datetime, obrigatório
 - `weight_kg`: double, obrigatório
 - `created_by`: varchar(36), obrigatório
-- índice único `weights_athlete_date_uq` em `athlete_id`, `entry_date`
+- índice único `weights_athlete_date_uq` em `athlete_id`, `entry_date` e índice `weights_created_by_idx` em `created_by`
