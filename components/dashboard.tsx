@@ -115,9 +115,9 @@ export function Dashboard({ userId, onSignOut }: { userId: string; onSignOut: ()
   const visibleWeights = useMemo(() => weights.filter((entry) => entry.athlete_id === selectedAthleteId), [weights, selectedAthleteId]);
   const metrics = useMemo(() => calculateMetrics(visibleRuns), [visibleRuns]);
   const currentWeight = visibleWeights.at(-1)?.weight_kg;
-  const firstWeight = activeAthlete?.start_weight_kg ?? visibleWeights[0]?.weight_kg;
+  const firstWeight = activeAthlete?.start_weight_kg ?? null;
   const targetWeight = activeAthlete?.target_weight_kg ?? 72;
-  const weightLost = firstWeight && currentWeight ? firstWeight - currentWeight : 0;
+  const weightLost = firstWeight !== null && currentWeight !== undefined ? firstWeight - currentWeight : null;
   const weightProgress = firstWeight && currentWeight && firstWeight !== targetWeight ? Math.max(0, Math.min(100, ((firstWeight - currentWeight) / (firstWeight - targetWeight)) * 100)) : 0;
   const paceChart = visibleRuns.map((run) => ({ date: shortDate(run.run_date), pace: Math.round(run.duration_seconds / run.distance_km), bpm: run.avg_heart_rate }));
   const weightChart = visibleWeights.map((entry) => ({ date: shortDate(entry.entry_date), weight: entry.weight_kg }));
@@ -175,7 +175,7 @@ export function Dashboard({ userId, onSignOut }: { userId: string; onSignOut: ()
               </ChartCard>
 
               <section className="rounded-[24px] bg-[#c7ff3f] p-6 text-[#111708]">
-                <div className="flex items-center justify-between"><div className="grid size-10 place-items-center rounded-xl bg-black/10"><Scale className="size-5" /></div>{weightLost > 0 && <span className="flex items-center gap-1 rounded-full bg-black/[.08] px-3 py-1.5 text-xs font-bold"><ArrowDownRight className="size-3.5" /> {formatDecimal(weightLost)} kg</span>}</div>
+                <div className="flex items-center justify-between"><div className="grid size-10 place-items-center rounded-xl bg-black/10"><Scale className="size-5" /></div>{weightLost !== null && weightLost > 0 && <span className="flex items-center gap-1 rounded-full bg-black/[.08] px-3 py-1.5 text-xs font-bold"><ArrowDownRight className="size-3.5" /> {formatDecimal(weightLost)} kg</span>}</div>
                 <p className="mt-8 text-sm font-semibold opacity-60">Peso atual</p>
                 <p className="mt-1 text-5xl font-black tracking-[-0.06em]">{currentWeight ? formatDecimal(currentWeight) : "—"} {currentWeight && <span className="text-xl">kg</span>}</p>
                 <div className="mt-7 h-2 overflow-hidden rounded-full bg-black/10"><div className="h-full rounded-full bg-[#111708] transition-all" style={{ width: `${weightProgress}%` }} /></div>
@@ -205,7 +205,7 @@ export function Dashboard({ userId, onSignOut }: { userId: string; onSignOut: ()
               <ChartCard title="Evolução do peso" subtitle="Registros diários em quilogramas">
                 <ResponsiveContainer width="100%" height={320}><LineChart data={weightChart} margin={{ top: 18, right: 10, bottom: 0, left: -10 }}><CartesianGrid stroke="rgba(255,255,255,.06)" vertical={false} /><XAxis dataKey="date" axisLine={false} tickLine={false} tick={{ fill: "rgba(255,255,255,.35)", fontSize: 12 }} /><YAxis domain={["dataMin - 1", "dataMax + 1"]} axisLine={false} tickLine={false} tick={{ fill: "rgba(255,255,255,.35)", fontSize: 11 }} /><Tooltip contentStyle={{ background: "#171b20", border: "1px solid rgba(255,255,255,.1)", borderRadius: 12 }} formatter={(value) => [`${value} kg`, "Peso"]} /><Line type="monotone" dataKey="weight" stroke="#c7ff3f" strokeWidth={3} dot={{ r: 4, fill: "#080a0d", stroke: "#c7ff3f", strokeWidth: 3 }} /></LineChart></ResponsiveContainer>
               </ChartCard>
-              <section className="rounded-[24px] border border-white/10 bg-[#11151a] p-6"><div className="flex items-center justify-between"><div className="grid size-11 place-items-center rounded-xl bg-[#c7ff3f]/10 text-[#c7ff3f]"><Scale /></div><Button onClick={() => setWeightOpen(true)} className="bg-[#c7ff3f] font-bold text-[#101508] hover:bg-[#d5ff70]"><Plus /> Registrar</Button></div><p className="mt-8 text-sm text-white/45">Evolução total</p><p className="mt-1 text-5xl font-black tracking-[-.06em]">{weightLost ? `−${formatDecimal(weightLost)}` : "—"} <span className="text-base text-white/35">kg</span></p><div className="mt-7 space-y-3 border-t border-white/[.07] pt-5">{[...visibleWeights].reverse().slice(0, 5).map((entry) => <div key={entry.id} className="flex items-center justify-between text-sm"><span className="text-white/45">{longDate(entry.entry_date)}</span><span className="font-mono font-bold">{formatDecimal(entry.weight_kg)} kg</span></div>)}</div></section>
+              <section className="rounded-[24px] border border-white/10 bg-[#11151a] p-6"><div className="flex items-center justify-between"><div className="grid size-11 place-items-center rounded-xl bg-[#c7ff3f]/10 text-[#c7ff3f]"><Scale /></div><Button onClick={() => setWeightOpen(true)} className="bg-[#c7ff3f] font-bold text-[#101508] hover:bg-[#d5ff70]"><Plus /> Registrar</Button></div><p className="mt-8 text-sm text-white/45">Peso perdido desde o início</p><p className="mt-1 flex items-baseline gap-2"><span className="text-5xl font-black tracking-[-.06em]">{weightLost !== null ? formatDecimal(weightLost) : "—"}</span>{weightLost !== null && <span className="text-base font-bold tracking-normal text-white/35">kg</span>}</p><div className="mt-7 space-y-3 border-t border-white/[.07] pt-5">{[...visibleWeights].reverse().slice(0, 5).map((entry) => <div key={entry.id} className="flex items-center justify-between text-sm"><span className="text-white/45">{longDate(entry.entry_date)}</span><span className="font-mono font-bold">{formatDecimal(entry.weight_kg)} kg</span></div>)}</div></section>
             </div>
           </TabsContent>
         </Tabs>
